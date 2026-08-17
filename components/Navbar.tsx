@@ -1,6 +1,5 @@
 
 import React, { useState, useEffect } from 'react';
-import { Gift } from 'lucide-react';
 import { AffiliateModal } from './AffiliateModal';
 
 export const Navbar = () => {
@@ -40,17 +39,15 @@ export const Navbar = () => {
             </div>
 
             <div className="flex items-center gap-3">
-                {/* Affiliate Button */}
                 <button
                     type="button"
                     onClick={() => setIsAffiliateOpen(true)}
-                    aria-label="Programme ambassadeur"
-                    title="Programme ambassadeur"
-                    className={`p-2 rounded-full transition-all duration-300 ${
-                         isScrolled ? 'text-black hover:bg-black/5' : 'text-white hover:bg-white/10'
+                    aria-label="Fidélité"
+                    className={`px-2 py-1 text-xs font-medium transition-all duration-300 ${
+                         isScrolled ? 'text-black hover:text-apple-blue' : 'text-white hover:text-white/70'
                     }`}
                 >
-                    <Gift className="w-5 h-5" aria-hidden="true" />
+                    Fidélité
                 </button>
 
                 {/* Minimal Action */}

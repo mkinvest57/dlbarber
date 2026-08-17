@@ -25,18 +25,6 @@ export const Footer = () => {
         <div className="text-center space-y-2">
             <p>© 2026 Daryl Barber Studio.</p>
             
-            {/* Satoshi Credit */}
-            <p className="flex items-center justify-center gap-1 opacity-60">
-            <span>Site par</span>
-            <a 
-                href="https://instagram.com/satoshi.mkf" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="hover:text-white transition-colors border-b border-transparent hover:border-white/30"
-            >
-                @satoshi.mkf
-            </a>
-            </p>
         </div>
 
         {/* Legal Links */}
