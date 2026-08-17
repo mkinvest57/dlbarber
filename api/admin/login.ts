@@ -1,5 +1,5 @@
-import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from '../_lib/http';
-import { signInAdmin } from '../_lib/auth';
+import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from '../_lib/http.js';
+import { signInAdmin } from '../_lib/auth.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);

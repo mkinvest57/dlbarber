@@ -1,8 +1,8 @@
 import { DateTime } from 'luxon';
-import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from '../_lib/http';
-import { requireAdmin } from '../_lib/auth';
-import { getSupabaseAdminClient } from '../_lib/supabase';
-import { parseStartAt } from '../_lib/validation';
+import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from '../_lib/http.js';
+import { requireAdmin } from '../_lib/auth.js';
+import { getSupabaseAdminClient } from '../_lib/supabase.js';
+import { parseStartAt } from '../_lib/validation.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);

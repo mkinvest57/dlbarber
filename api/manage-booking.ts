@@ -1,6 +1,6 @@
-import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from './_lib/http';
-import { getSupabaseAdminClient } from './_lib/supabase';
-import { hashToken } from './_lib/validation';
+import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from './_lib/http.js';
+import { getSupabaseAdminClient } from './_lib/supabase.js';
+import { hashToken } from './_lib/validation.js';
 
 type ManagePayload = { token?: unknown; action?: unknown };
 

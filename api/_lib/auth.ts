@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
-import { ApiRequest, ApiResponse } from './http';
-import { getSupabaseAdminClient, getSupabaseAuthClient } from './supabase';
+import { ApiRequest, ApiResponse } from './http.js';
+import { getSupabaseAdminClient, getSupabaseAuthClient } from './supabase.js';
 
 const ACCESS_COOKIE = 'daryl_admin_access';
 const REFRESH_COOKIE = 'daryl_admin_refresh';

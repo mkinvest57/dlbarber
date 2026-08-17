@@ -1,7 +1,7 @@
-import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from './_lib/http';
-import { createManageToken } from './_lib/auth';
-import { getSupabaseAdminClient } from './_lib/supabase';
-import { hashToken, idempotencyKey, normalizeName, normalizePhone, optionalReferralCode, parseStartAt } from './_lib/validation';
+import { ApiRequest, ApiResponse, methodNotAllowed, readBody, sendJson } from './_lib/http.js';
+import { createManageToken } from './_lib/auth.js';
+import { getSupabaseAdminClient } from './_lib/supabase.js';
+import { hashToken, idempotencyKey, normalizeName, normalizePhone, optionalReferralCode, parseStartAt } from './_lib/validation.js';
 
 type BookingPayload = {
   firstName?: unknown;

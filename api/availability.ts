@@ -1,7 +1,7 @@
 import { DateTime } from 'luxon';
-import { ApiRequest, ApiResponse, methodNotAllowed, sendJson } from './_lib/http';
-import { getSupabaseAdminClient } from './_lib/supabase';
-import { BARBER_TIMEZONE } from './_lib/validation';
+import { ApiRequest, ApiResponse, methodNotAllowed, sendJson } from './_lib/http.js';
+import { getSupabaseAdminClient } from './_lib/supabase.js';
+import { BARBER_TIMEZONE } from './_lib/validation.js';
 
 const ACTIVE_STATUSES = new Set(['pending', 'confirmed', 'walk-in']);
 

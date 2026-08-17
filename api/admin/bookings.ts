@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { ApiRequest, ApiResponse, methodNotAllowed, queryValue, readBody, sendJson } from '../_lib/http';
-import { createManageToken, requireAdmin } from '../_lib/auth';
-import { APPOINTMENT_SELECT, toClientBooking } from '../_lib/admin-data';
-import { getSupabaseAdminClient } from '../_lib/supabase';
-import { hashToken, idempotencyKey, normalizeName, normalizePhone, parseStartAt, uuid } from '../_lib/validation';
+import { ApiRequest, ApiResponse, methodNotAllowed, queryValue, readBody, sendJson } from '../_lib/http.js';
+import { createManageToken, requireAdmin } from '../_lib/auth.js';
+import { APPOINTMENT_SELECT, toClientBooking } from '../_lib/admin-data.js';
+import { getSupabaseAdminClient } from '../_lib/supabase.js';
+import { hashToken, idempotencyKey, normalizeName, normalizePhone, parseStartAt, uuid } from '../_lib/validation.js';
 
 type ManualBooking = {
   firstName?: unknown;

@@ -1,5 +1,5 @@
 import { DateTime } from 'luxon';
-import { BARBER_TIMEZONE } from './validation';
+import { BARBER_TIMEZONE } from './validation.js';
 
 function euro(cents: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(cents / 100);

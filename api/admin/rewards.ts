@@ -1,7 +1,7 @@
-import { ApiRequest, ApiResponse, methodNotAllowed, queryValue, readBody, sendJson } from '../_lib/http';
-import { requireAdmin } from '../_lib/auth';
-import { getSupabaseAdminClient } from '../_lib/supabase';
-import { normalizePhone, uuid } from '../_lib/validation';
+import { ApiRequest, ApiResponse, methodNotAllowed, queryValue, readBody, sendJson } from '../_lib/http.js';
+import { requireAdmin } from '../_lib/auth.js';
+import { getSupabaseAdminClient } from '../_lib/supabase.js';
+import { normalizePhone, uuid } from '../_lib/validation.js';
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return methodNotAllowed(res, ['GET', 'POST']);
