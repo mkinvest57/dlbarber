@@ -14,6 +14,8 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose 
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [lookupPhone, setLookupPhone] = useState('');
+  const [summary, setSummary] = useState<{ code: string | null; balanceCents: number; completedVisits: number; nextFreeVisit: number } | null>(null);
 
   if (!isOpen) return null;
   const referralUrl = code ? `${window.location.origin}/?ref=${code}#booking` : '';
@@ -46,6 +48,15 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose 
       setError('Copiez le lien depuis la barre d’adresse.');
     }
   };
+  const lookup = async (event: React.FormEvent) => {
+    event.preventDefault(); setError(''); setSummary(null);
+    try {
+      const response = await fetch(`/api/referral/join?phone=${encodeURIComponent(lookupPhone)}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error('lookup_failed');
+      setSummary(payload.summary);
+    } catch { setError('Aucun compte ambassadeur trouvé pour ce numéro.'); }
+  };
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md" role="dialog" aria-modal="true" aria-labelledby="affiliate-title">
@@ -59,6 +70,11 @@ export const AffiliateModal: React.FC<AffiliateModalProps> = ({ isOpen, onClose 
         </div>
 
         <div className="overflow-y-auto p-6">
+          <form onSubmit={lookup} className="mb-5 flex gap-2 border-b border-white/10 pb-5">
+            <input required type="tel" inputMode="tel" value={lookupPhone} onChange={(event) => setLookupPhone(event.target.value)} placeholder="Mon numéro" className="min-w-0 flex-1 rounded-md border border-white/15 bg-black p-3 text-sm text-white outline-none" />
+            <button className="rounded-md border border-white/15 px-3 text-xs font-bold text-white">Mon solde</button>
+          </form>
+          {summary && <div className="mb-5 grid grid-cols-3 gap-2 rounded-md border border-apple-blue/30 bg-apple-blue/10 p-3 text-center text-white"><span className="text-xs"><b className="block text-base">{summary.code || '---'}</b>Code</span><span className="text-xs"><b className="block text-base">{(summary.balanceCents / 100).toFixed(2)} EUR</b>Crédit</span><span className="text-xs"><b className="block text-base">{summary.completedVisits}/8</b>Fidélité</span></div>}
           {!code ? (
             <form onSubmit={join} className="space-y-4">
               <p className="text-sm leading-relaxed text-white/65">Créez votre code, partagez-le et gagnez 3 EUR de crédit pour chaque proche dont le rendez-vous est terminé.</p>

@@ -107,6 +107,7 @@ export const AdminInterface = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [manualSlotId, setManualSlotId] = useState<string | null>(null);
+  const nextBookings = useMemo(() => bookings.filter((booking) => ACTIVE_STATUSES.includes(booking.status) && Date.parse(booking.startAt || '') >= Date.now()).sort((a, b) => Date.parse(a.startAt || '') - Date.parse(b.startAt || '')).slice(0, 4), [bookings]);
   const [manualFirstName, setManualFirstName] = useState('');
   const [manualLastName, setManualLastName] = useState('');
   const [manualPhone, setManualPhone] = useState('');
@@ -341,6 +342,7 @@ export const AdminInterface = () => {
       <main className="flex-1 overflow-y-auto p-4 sm:p-6">
         {view === 'schedule' && (
           <div className="mx-auto max-w-3xl">
+            {nextBookings.length > 0 && <div className="mb-5 border border-orange-500/30 bg-orange-500/10 p-3"><div className="mb-2 text-xs font-bold uppercase text-orange-300">Prochains rendez-vous à traiter</div><div className="grid gap-2 sm:grid-cols-2">{nextBookings.map((booking) => <button key={booking.id} type="button" onClick={() => setSelectedBooking(booking)} className="flex items-center justify-between bg-black/40 p-3 text-left"><span><b className="block text-sm">{booking.client.firstName} {booking.client.lastName}</b><span className="text-xs text-white/50">{booking.service.name}</span></span><b className="font-mono text-sm text-orange-300">{booking.time}</b></button>)}</div></div>}
             <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
               {schedules.map((schedule, index) => {
                 const date = getFormattedDate(schedule.date);
