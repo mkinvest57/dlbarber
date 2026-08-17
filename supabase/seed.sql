@@ -1,0 +1,1 @@
+-- Production data is seeded by the production_booking_system migration.

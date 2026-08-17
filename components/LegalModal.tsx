@@ -10,17 +10,17 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-md flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[150] bg-black/95 backdrop-blur-md flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="legal-title">
       <div className="bg-[#111] w-full max-w-lg rounded-3xl border border-white/10 overflow-hidden relative animate-slab-entry flex flex-col max-h-[85vh]">
         
         {/* Header */}
         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#111] z-10 shrink-0">
-            <h2 className="text-white font-space font-bold text-lg flex items-center gap-2">
+            <h2 id="legal-title" className="text-white font-space font-bold text-lg flex items-center gap-2">
                 <Shield className="w-5 h-5 text-apple-blue" />
                 Mentions Légales
             </h2>
-            <button onClick={onClose} className="text-white/40 hover:text-white transition-colors p-2 -mr-2">
-                <X className="w-6 h-6" />
+            <button type="button" onClick={onClose} aria-label="Fermer" className="text-white/40 hover:text-white transition-colors p-2 -mr-2">
+                <X className="w-6 h-6" aria-hidden="true" />
             </button>
         </div>
 
@@ -37,7 +37,7 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose }) => {
                     <p><strong className="text-white">Dénomination :</strong> Daryl Barber</p>
                     <p><strong className="text-white">Statut :</strong> Entreprise Individuelle (EI)</p>
                     <p><strong className="text-white">Téléphone :</strong> 06 11 58 49 79</p>
-                    <p><strong className="text-white">Directeur de la publication :</strong> Daryl [NOM]</p>
+                    <p><strong className="text-white">Directeur de la publication :</strong> Daryl Barber</p>
                 </div>
             </section>
 
@@ -51,9 +51,9 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose }) => {
                     Le site est hébergé par :
                 </p>
                 <div className="bg-white/5 p-4 rounded-xl border border-white/10 text-xs sm:text-sm">
-                    <p><strong className="text-white">Hébergeur :</strong> Netlify, Inc.</p>
-                    <p><strong className="text-white">Adresse :</strong> 2325 3rd Street, Suite 215, San Francisco, California 94107, USA.</p>
-                    <p><strong className="text-white">Site web :</strong> www.netlify.com</p>
+                    <p><strong className="text-white">Hébergeur :</strong> Vercel Inc.</p>
+                    <p><strong className="text-white">Adresse :</strong> 340 S Lemon Ave #4133, Walnut, CA 91789, USA.</p>
+                    <p><strong className="text-white">Site web :</strong> vercel.com</p>
                 </div>
             </section>
 
@@ -70,13 +70,13 @@ export const LegalModal: React.FC<LegalModalProps> = ({ isOpen, onClose }) => {
                     
                     <div className="pl-4 border-l-2 border-apple-blue/50 space-y-2">
                         <p><strong className="text-white">Données collectées :</strong> Nom, Prénom, Numéro de téléphone.</p>
-                        <p><strong className="text-white">Finalité :</strong> Gestion des rendez-vous, envoi de SMS de confirmation, et programme de fidélité.</p>
-                        <p><strong className="text-white">Conservation :</strong> Les données sont conservées pour une durée de 3 ans après le dernier contact.</p>
+                        <p><strong className="text-white">Finalité :</strong> Gestion des rendez-vous, contact du client et programme de fidélité.</p>
+                        <p><strong className="text-white">Conservation :</strong> Les données sont conservées pendant la durée nécessaire à la gestion des rendez-vous, puis supprimées ou anonymisées selon les obligations légales applicables.</p>
                         <p><strong className="text-white">Vos Droits :</strong> Vous disposez d'un droit d'accès, de rectification et de suppression de vos données. Pour l'exercer, contactez-nous par téléphone.</p>
                     </div>
 
                     <p className="text-xs text-white/50 bg-black/50 p-3 rounded-lg">
-                        <strong className="text-white">Cookies & LocalStorage :</strong> Ce site n'utilise pas de cookies publicitaires tiers. Il utilise le stockage local de votre appareil pour mémoriser votre connexion (Admin) ou vos préférences d'affichage.
+                        <strong className="text-white">Cookies techniques :</strong> Aucun cookie publicitaire n'est utilisé. La session administrateur est conservée dans des cookies HttpOnly strictement nécessaires.
                     </p>
                 </div>
             </section>

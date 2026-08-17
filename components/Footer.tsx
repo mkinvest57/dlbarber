@@ -23,7 +23,7 @@ export const Footer = () => {
         </a>
 
         <div className="text-center space-y-2">
-            <p>© 2024 Daryl Barber Studio.</p>
+            <p>© 2026 Daryl Barber Studio.</p>
             
             {/* Satoshi Credit */}
             <p className="flex items-center justify-center gap-1 opacity-60">

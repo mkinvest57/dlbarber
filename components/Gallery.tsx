@@ -3,10 +3,10 @@ import React from 'react';
 import { Haircut } from '../types';
 
 const HAIRCUTS: Haircut[] = [
-  { id: 1, title: 'Fade Master', category: 'Dégradé', image: 'https://images.unsplash.com/photo-1622286342621-4bd786c2447c?q=80&w=1000&auto=format&fit=crop' },
-  { id: 2, title: 'Textured Crop', category: 'Ciseaux', image: 'https://images.unsplash.com/photo-1599351431202-1e0f0137899a?q=80&w=1000&auto=format&fit=crop' },
-  { id: 3, title: 'Classic', category: 'Style', image: 'https://images.unsplash.com/photo-1605497788044-5a32c7078486?q=80&w=1000&auto=format&fit=crop' },
-  { id: 4, title: 'Sharp Line', category: 'Contours', image: 'https://images.unsplash.com/photo-1517832606299-7ae9b720a186?q=80&w=1000&auto=format&fit=crop' },
+  { id: 1, title: 'Fade Master', category: 'Dégradé', image: '/images/gallery-fade.jpg' },
+  { id: 2, title: 'Textured Crop', category: 'Ciseaux', image: '/images/gallery-texture.jpg' },
+  { id: 3, title: 'Classic', category: 'Style', image: '/images/gallery-classic.jpg' },
+  { id: 4, title: 'Sharp Line', category: 'Contours', image: '/images/gallery-sharp.jpg' },
 ];
 
 export const Gallery = () => {
@@ -29,6 +29,10 @@ export const Gallery = () => {
             <img 
               src={cut.image} 
               alt={cut.title}
+              width="1000"
+              height="1333"
+              loading="lazy"
+              decoding="async"
               className="absolute inset-0 w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />

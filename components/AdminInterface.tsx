@@ -1,916 +1,530 @@
-
-import React, { useState, useEffect } from 'react';
-import { useBooking } from '../BookingContext';
-import { 
-  X, Lock, Settings, Power, Phone, CheckCircle, XCircle, 
-  Trash2, UserPlus, Ban, Search, Gift, Zap, Star, Wifi, WifiOff, Database, RefreshCw, AlertCircle
+import React, { useMemo, useState } from 'react';
+import {
+  Ban,
+  CalendarDays,
+  CheckCircle,
+  CircleDollarSign,
+  Gift,
+  LogOut,
+  Phone,
+  Plus,
+  RefreshCw,
+  Search,
+  Settings,
+  Star,
+  UserPlus,
+  Users,
+  X,
+  XCircle,
 } from 'lucide-react';
-import { ClientBooking } from '../types';
+import { useBooking } from '../BookingContext';
+import { BookingStatus, ClientBooking, CustomerRewardSummary } from '../types';
+
+const ACTIVE_STATUSES: BookingStatus[] = ['pending', 'confirmed', 'walk-in'];
+
+const STATUS_LABEL: Record<BookingStatus, string> = {
+  pending: 'En attente',
+  confirmed: 'Confirmé',
+  completed: 'Terminé',
+  cancelled: 'Annulé',
+  rejected: 'Refusé',
+  no_show: 'Absent',
+  'walk-in': 'Passage',
+};
+
+const STATUS_STYLE: Record<BookingStatus, string> = {
+  pending: 'border-orange-500/30 bg-orange-500/10 text-orange-400',
+  confirmed: 'border-blue-500/30 bg-blue-500/10 text-blue-400',
+  completed: 'border-green-500/30 bg-green-500/10 text-green-400',
+  cancelled: 'border-white/10 bg-white/5 text-white/40',
+  rejected: 'border-red-500/30 bg-red-500/10 text-red-400',
+  no_show: 'border-yellow-500/30 bg-yellow-500/10 text-yellow-400',
+  'walk-in': 'border-purple-500/30 bg-purple-500/10 text-purple-400',
+};
+
+function money(cents: number) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(cents / 100);
+}
+
+function errorMessage(error: unknown) {
+  if (!(error instanceof Error)) return 'Une erreur est survenue.';
+  const messages: Record<string, string> = {
+    slot_unavailable: 'Ce créneau est déjà occupé.',
+    invalid_status_change: 'Ce changement de statut n’est pas autorisé.',
+    reward_unavailable: 'Cette récompense n’est pas disponible pour ce rendez-vous.',
+    customer_not_found: 'Aucun client ne correspond à ce numéro.',
+    rewards_unavailable: 'Le solde fidélité est momentanément indisponible.',
+  };
+  return messages[error.message] || error.message;
+}
+
+function confirmationSmsUrl(booking: ClientBooking) {
+  const appointmentDate = booking.startAt
+    ? new Intl.DateTimeFormat('fr-FR', {
+        dateStyle: 'full',
+        timeStyle: 'short',
+        timeZone: 'Europe/Paris',
+      }).format(new Date(booking.startAt))
+    : `${booking.date} à ${booking.time}`;
+  const message = `Bonjour ${booking.client.firstName}, votre rendez-vous chez Daryl Barber est confirmé pour le ${appointmentDate}. À bientôt !`;
+  const bodySeparator = /iPad|iPhone|iPod/i.test(navigator.userAgent) ? '&' : '?';
+  return `sms:${booking.client.phone}${bodySeparator}body=${encodeURIComponent(message)}`;
+}
 
 export const AdminInterface = () => {
-  const { 
-    isAdminMode, 
-    setAdminMode, 
-    isAuthenticated, 
-    authenticate, 
+  const {
+    isAdminMode,
+    setAdminMode,
+    isAuthenticated,
+    authenticate,
     logout,
-    schedules, 
+    schedules,
+    services,
+    bookings,
     getBookingsForDate,
+    getFormattedDate,
     updateBookingStatus,
     deleteBooking,
-    addBooking,
+    addManualBooking,
     toggleSlotAvailability,
-    bookings,
-    getFormattedDate,
-    getReferralBalance,
+    lookupCustomerRewards,
     redeemReferralRewards,
     applyLoyaltyFreeCut,
-    getClientVisitCount,
+    registerAffiliateCode,
+    recordAdminSmsDraftOpened,
     isDbConnected,
-    dbError,
-    initializeDb,
-    refreshData
+    refreshData,
   } = useBooking();
 
-  const [pin, setPin] = useState('');
-  const [isShaking, setIsShaking] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
+  const [view, setView] = useState<'schedule' | 'stats' | 'loyalty'>('schedule');
   const [selectedDateIndex, setSelectedDateIndex] = useState(0);
   const [selectedBooking, setSelectedBooking] = useState<ClientBooking | null>(null);
-  const [view, setView] = useState<'schedule' | 'stats' | 'loyalty'>('schedule');
-
-  // Manual Booking State
-  const [isManualBookingOpen, setIsManualBookingOpen] = useState(false);
-  const [manualSlotId, setManualSlotId] = useState<string | null>(null);
-  const [manualName, setManualName] = useState('');
-
-  // DB Config State
-  const [showDbConfig, setShowDbConfig] = useState(false);
-  const [dbUrlInput, setDbUrlInput] = useState('');
-  const [isInitLoading, setIsInitLoading] = useState(false);
-  const [configError, setConfigError] = useState<string | null>(null);
-  
-  // Refresh loading state for animation
+  const [actionError, setActionError] = useState('');
+  const [pendingAction, setPendingAction] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Loyalty Lookup State
+  const [manualSlotId, setManualSlotId] = useState<string | null>(null);
+  const [manualFirstName, setManualFirstName] = useState('');
+  const [manualLastName, setManualLastName] = useState('');
+  const [manualPhone, setManualPhone] = useState('');
+  const [manualServiceId, setManualServiceId] = useState('');
+
   const [scanPhone, setScanPhone] = useState('');
-  const [scanReferral, setScanReferral] = useState<{count: number, creditAmount: number} | null>(null);
-  const [scanVisits, setScanVisits] = useState<number>(0);
-  const [clientBookings, setClientBookings] = useState<ClientBooking[]>([]);
+  const [rewardSummary, setRewardSummary] = useState<CustomerRewardSummary | null>(null);
+  const [rewardError, setRewardError] = useState('');
+  const [isRewardLoading, setIsRewardLoading] = useState(false);
+  const [newReferralCode, setNewReferralCode] = useState('');
 
-  // Delete Confirmation State
-  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const currentSchedule = schedules[selectedDateIndex] || { date: '', slots: [] };
+  const dayBookings = currentSchedule.date ? getBookingsForDate(currentSchedule.date) : [];
 
-  // Sync selected date with schedule
-  const currentDateSchedule = schedules[selectedDateIndex] || { date: new Date().toISOString(), slots: [] };
-  const dayBookings = getBookingsForDate(currentDateSchedule.date);
-  
-  // Login Handler
-  useEffect(() => {
-    if (pin.length === 4) {
-      const isValid = authenticate(pin);
-      if (isValid) {
-        setPin('');
-      } else {
-        setIsShaking(true);
-        setTimeout(() => {
-          setIsShaking(false);
-          setPin('');
-        }, 400);
-      }
-    }
-  }, [pin, authenticate]);
+  const stats = useMemo(() => {
+    const now = Date.now();
+    const month = new Date().toISOString().slice(0, 7);
+    const completedThisMonth = bookings.filter((booking) => booking.status === 'completed' && booking.date.startsWith(month));
+    return {
+      pending: bookings.filter((booking) => booking.status === 'pending').length,
+      upcoming: bookings.filter((booking) => ACTIVE_STATUSES.includes(booking.status) && Date.parse(booking.startAt || '') >= now).length,
+      completed: bookings.filter((booking) => booking.status === 'completed').length,
+      revenue: completedThisMonth.reduce((total, booking) => total + (booking.currentPriceCents || 0), 0),
+    };
+  }, [bookings]);
 
-  // Load existing DB URL into input when config opens
-  useEffect(() => {
-      // Auto-open config if we are offline or have an error
-      if ((!isDbConnected || dbError) && isAuthenticated) {
-          setShowDbConfig(true);
-      }
-      if (showDbConfig) {
-          setDbUrlInput(localStorage.getItem('daryl_db_url') || '');
-          setConfigError(null);
-      }
-  }, [showDbConfig, isDbConnected, dbError, isAuthenticated]);
+  const rewardBookings = useMemo(() => {
+    if (!rewardSummary) return [];
+    return bookings
+      .filter((booking) => booking.customerId === rewardSummary.customerId && ACTIVE_STATUSES.includes(booking.status))
+      .sort((a, b) => Date.parse(a.startAt || '') - Date.parse(b.startAt || ''));
+  }, [bookings, rewardSummary]);
 
-  // Reset delete confirm when selection changes
-  useEffect(() => {
-    setDeleteConfirm(false);
-  }, [selectedBooking]);
-
-  const handleKeypad = (num: string) => {
-    if (pin.length < 4) setPin(prev => prev + num);
-  };
-  
-  const handleRefresh = async () => {
-      setIsRefreshing(true);
-      await refreshData();
-      // Keep animation for a moment
-      setTimeout(() => setIsRefreshing(false), 800);
-  };
-
-  const handleResetDbConfig = () => {
-      if (window.confirm("Voulez-vous supprimer la configuration locale et revenir aux paramètres par défaut du code ?")) {
-          localStorage.removeItem('daryl_db_url');
-          window.location.reload();
-      }
-  };
-
-  const handleSaveDbUrl = () => {
-      const cleanUrl = dbUrlInput.trim();
-      
-      // Validation intelligente pour aider l'utilisateur
-      if (!cleanUrl) {
-           localStorage.removeItem('daryl_db_url');
-           alert("Configuration supprimée. Retour au mode par défaut.");
-           window.location.reload();
-           return;
-      }
-
-      // Si l'utilisateur met juste un mot de passe (pas de postgres://)
-      if (!cleanUrl.startsWith('postgres')) {
-          setConfigError("Erreur: Vous devez copier le lien 'Connection String' complet (postgres://...).");
-          return;
-      }
-      
-      localStorage.setItem('daryl_db_url', cleanUrl);
-      alert("Configuration sauvegardée ! Le site va redémarrer pour se connecter.");
-      window.location.reload();
-  };
-  
-  const handleStatusUpdate = (status: 'confirmed' | 'rejected') => {
-    if (selectedBooking) {
-      updateBookingStatus(selectedBooking.id, status);
-      
-      // -- SMS Notification Trigger --
-      if (status === 'confirmed' && selectedBooking.client.phone) {
-        const d = getFormattedDate(selectedBooking.date);
-        const dateStr = `${d.weekday} ${d.day} ${d.month}`;
-        const message = `Bonjour ${selectedBooking.client.firstName}, votre rendez-vous chez Daryl Barber est confirmé pour le ${dateStr} à ${selectedBooking.time}. A bientôt !`;
-        
-        // Open native SMS app
-        window.open(`sms:${selectedBooking.client.phone}?&body=${encodeURIComponent(message)}`, '_blank');
-      }
-
-      setSelectedBooking(null);
-    }
-  };
-
-  const handleDelete = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    
-    // First click: Ask for confirmation
-    if (!deleteConfirm) {
-        setDeleteConfirm(true);
-        // Reset after 3s if not confirmed
-        setTimeout(() => setDeleteConfirm(false), 3000);
-        return;
-    }
-
-    // Second click: Execute delete
-    if (selectedBooking) {
-        deleteBooking(selectedBooking.id);
-        setSelectedBooking(null);
-        setDeleteConfirm(false);
-    }
-  };
-
-  const handleCreateWalkIn = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualSlotId || !manualName) return;
-
-    const slot = currentDateSchedule.slots.find(s => s.id === manualSlotId);
-    if (!slot) return;
-
-    addBooking({
-      id: Math.random().toString(36).substr(2, 9),
-      date: currentDateSchedule.date,
-      slotId: slot.id,
-      time: slot.time,
-      service: { id: 'manual', name: 'Passage / Manuel', duration: '', price: '20 €' },
-      client: { firstName: manualName, lastName: '', phone: '' },
-      status: 'walk-in'
-    });
-
-    setManualName('');
-    setManualSlotId(null);
-    setIsManualBookingOpen(false);
-  };
-
-  const checkLoyalty = () => {
-      if (scanPhone.length > 9) {
-          // 1. Referral Balance
-          const referralRes = getReferralBalance(scanPhone);
-          setScanReferral(referralRes);
-
-          // 2. Classic Loyalty Visits
-          const visits = getClientVisitCount(scanPhone);
-          setScanVisits(visits);
-
-          // 3. Find relevant bookings (Today & Future)
-          const cleanPhone = scanPhone.replace(/\D/g, '');
-          const relevant = bookings.filter(b => {
-              const bPhone = b.client.phone.replace(/\D/g, '');
-              const isMatch = bPhone === cleanPhone;
-              const isNotRejected = b.status !== 'rejected';
-              return isMatch && isNotRejected;
-          }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-          
-          setClientBookings(relevant);
-      }
-  };
-
-  const handleRedeemReferral = async (bookingId: string) => {
-      if (!scanReferral) return;
-      if (scanReferral.creditAmount === 0) return;
-      
-      const confirmMsg = `Utiliser le solde parrainage (${scanReferral.creditAmount} €) pour réduire le prix de cette coupe ?`;
-
-      if (window.confirm(confirmMsg)) {
-          await redeemReferralRewards(scanPhone, bookingId);
-          alert("Réduction parrainage appliquée !");
-          checkLoyalty(); // Refresh data
-      }
-  };
-
-  const handleApplyLoyaltyCut = async (bookingId: string) => {
-      if (window.confirm("Valider la 8ème coupe offerte pour ce client ?")) {
-          await applyLoyaltyFreeCut(bookingId);
-          alert("Gratuité fidélité appliquée !");
-          checkLoyalty(); // Refresh data
-      }
-  };
-
-  // Render Logic
   if (!isAdminMode) return null;
 
-  // -- AUTH SCREEN --
+  const runAction = async (name: string, action: () => Promise<void>) => {
+    setPendingAction(name);
+    setActionError('');
+    try {
+      await action();
+    } catch (error) {
+      setActionError(errorMessage(error));
+      throw error;
+    } finally {
+      setPendingAction('');
+    }
+  };
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsLoginSubmitting(true);
+    setLoginError('');
+    const valid = await authenticate(loginEmail, loginPassword);
+    if (!valid) setLoginError('Identifiants invalides ou compte non autorisé.');
+    setIsLoginSubmitting(false);
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    setActionError('');
+    try {
+      await refreshData();
+    } catch (error) {
+      setActionError(errorMessage(error));
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleStatus = async (status: BookingStatus) => {
+    if (!selectedBooking) return;
+    const booking = selectedBooking;
+    try {
+      await runAction(`status-${status}`, () => updateBookingStatus(booking.id, status));
+      if (status === 'confirmed') {
+        setSelectedBooking({ ...booking, status });
+        await recordAdminSmsDraftOpened(booking.id).catch(() => undefined);
+        try {
+          window.location.assign(confirmationSmsUrl(booking));
+        } catch {
+          // The confirmed booking remains open with a manual SMS fallback.
+        }
+        return;
+      }
+      setSelectedBooking(null);
+    } catch {
+      // The modal stays open so the operator can retry.
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!selectedBooking || !window.confirm('Annuler ce rendez-vous ?')) return;
+    try {
+      await runAction('cancel', () => deleteBooking(selectedBooking.id));
+      setSelectedBooking(null);
+    } catch {
+      // The modal stays open so the operator can retry.
+    }
+  };
+
+  const openManualBooking = (slotId: string, availableServiceIds?: string[]) => {
+    const firstService = services.find((service) => !availableServiceIds || availableServiceIds.includes(service.id));
+    if (!firstService) return;
+    setManualServiceId(firstService.id);
+    setManualSlotId(slotId);
+    setActionError('');
+  };
+
+  const handleManualBooking = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const slot = currentSchedule.slots.find((item) => item.id === manualSlotId);
+    const service = services.find((item) => item.id === manualServiceId);
+    if (!slot?.startAt || !service) return;
+    try {
+      await runAction('manual-booking', () => addManualBooking({
+        id: 'pending',
+        date: currentSchedule.date,
+        slotId: slot.id,
+        time: slot.time,
+        startAt: slot.startAt,
+        service,
+        client: { firstName: manualFirstName, lastName: manualLastName, phone: manualPhone },
+        status: 'walk-in',
+      }));
+      setManualSlotId(null);
+      setManualFirstName('');
+      setManualLastName('');
+      setManualPhone('');
+    } catch {
+      // Error is shown in the modal.
+    }
+  };
+
+  const refreshRewards = async () => {
+    setIsRewardLoading(true);
+    setRewardError('');
+    try {
+      setRewardSummary(await lookupCustomerRewards(scanPhone));
+    } catch (error) {
+      setRewardSummary(null);
+      setRewardError(errorMessage(error));
+    } finally {
+      setIsRewardLoading(false);
+    }
+  };
+
+  const applyReward = async (kind: 'referral' | 'loyalty', booking: ClientBooking) => {
+    if (!rewardSummary) return;
+    const prompt = kind === 'referral'
+      ? `Appliquer jusqu’à ${money(rewardSummary.referralBalanceCents)} de crédit à ce rendez-vous ?`
+      : 'Appliquer la coupe fidélité offerte à ce rendez-vous ?';
+    if (!window.confirm(prompt)) return;
+    setRewardError('');
+    try {
+      if (kind === 'referral') await redeemReferralRewards(booking.id, rewardSummary.customerId);
+      else await applyLoyaltyFreeCut(booking.id);
+      await refreshRewards();
+    } catch (error) {
+      setRewardError(errorMessage(error));
+    }
+  };
+
+  const createReferralCode = async () => {
+    if (!/^[A-Z0-9]{4}$/.test(newReferralCode)) return;
+    setRewardError('');
+    const created = await registerAffiliateCode(scanPhone, newReferralCode);
+    if (!created) {
+      setRewardError('Ce code est invalide ou déjà utilisé.');
+      return;
+    }
+    setNewReferralCode('');
+    await refreshRewards();
+  };
+
   if (!isAuthenticated) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 animate-fade-in">
-        <button 
-          onClick={() => setAdminMode(false)}
-          className="absolute top-6 right-6 text-white/50 hover:text-white p-4"
-        >
-          <X className="w-6 h-6" />
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 p-6" role="dialog" aria-modal="true" aria-labelledby="admin-login-title">
+        <button type="button" onClick={() => setAdminMode(false)} aria-label="Fermer" className="absolute right-5 top-5 p-3 text-white/50 hover:text-white focus-visible:ring-2 focus-visible:ring-apple-blue">
+          <X className="h-6 w-6" aria-hidden="true" />
         </button>
-
-        <div className="w-full max-w-sm flex flex-col items-center relative">
-          
-          {/* DB Config Button (Bottom Left of Panel) */}
-          {!showDbConfig && (
-            <button 
-                onClick={() => setShowDbConfig(true)}
-                className="absolute -top-16 left-0 p-2 text-white/20 hover:text-white transition-colors flex items-center gap-2 bg-white/5 rounded-lg border border-white/10"
-                title="Configurer Base de Données"
-            >
-                <Settings className="w-5 h-5" />
-                <span className="text-[10px] uppercase font-bold">Réglages BDD</span>
-                {(!isDbConnected || dbError) && <AlertCircle className="w-4 h-4 text-red-500 animate-pulse ml-1" />}
-            </button>
-          )}
-
-          <div className="mb-12 flex flex-col items-center">
-            <div className={`w-16 h-16 rounded-2xl flex items-center justify-center mb-6 border relative transition-colors ${dbError ? 'bg-red-500/10 border-red-500/30' : 'bg-white/5 border-white/10'}`}>
-              <Lock className="w-6 h-6 text-white" />
-              {isDbConnected ? (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-[#111]"></div>
-              ) : (
-                  <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-[#111]"></div>
-              )}
-            </div>
-            <h2 className="text-2xl font-space font-bold text-white mb-2">Accès Système</h2>
-            <p className="text-white/40 text-sm font-mono">
-                {isDbConnected ? 'Système ONLINE' : 'Mode HORS LIGNE'}
-            </p>
-            {/* Petit message d'erreur si pas de popup */}
-            {dbError && !showDbConfig && (
-                <div className="mt-2 bg-red-500/10 p-2 rounded max-w-[280px] text-center border border-red-500/20">
-                    <p className="text-[10px] text-red-400 font-mono font-bold uppercase mb-1">Erreur de Connexion</p>
-                    <p className="text-[9px] text-red-300 font-mono break-all line-clamp-2">{dbError}</p>
-                </div>
-            )}
+        <form onSubmit={handleLogin} className="w-full max-w-sm space-y-5 rounded-lg border border-white/10 bg-[#111] p-6">
+          <div>
+            <h2 id="admin-login-title" className="font-space text-2xl font-bold text-white">Accès administrateur</h2>
+            <p className="mt-2 text-sm text-white/40">Compte professionnel sécurisé</p>
           </div>
-
-          {showDbConfig ? (
-               <div className="w-full bg-[#111] p-6 rounded-2xl border border-white/10 animate-fade-in mb-8 shadow-2xl relative z-50">
-                   <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                       <Database className="w-4 h-4 text-apple-blue" />
-                       Lier la Base de Données
-                   </h3>
-                   
-                   {/* Affichage de l'erreur REELLE de connexion ici */}
-                   {dbError && (
-                       <div className="bg-red-500/10 border border-red-500/20 p-3 rounded mb-4">
-                           <p className="text-[10px] text-red-400 font-bold uppercase mb-1 flex items-center gap-1">
-                               <AlertCircle className="w-3 h-3" />
-                               Échec de connexion :
-                           </p>
-                           <p className="text-[10px] text-white/70 font-mono break-all">
-                               {dbError}
-                           </p>
-                       </div>
-                   )}
-
-                   <p className="text-xs text-white/60 mb-4">
-                       Si la connexion automatique échoue, vous pouvez forcer le lien ici.
-                   </p>
-
-                   <input 
-                        type="text" 
-                        value={dbUrlInput} 
-                        onChange={(e) => {
-                             setDbUrlInput(e.target.value);
-                             setConfigError(null);
-                        }}
-                        placeholder="postgres://..."
-                        className={`w-full bg-black border ${configError ? 'border-red-500' : 'border-white/20'} rounded p-3 text-xs text-white font-mono mb-2 focus:border-apple-blue outline-none placeholder:text-white/20`}
-                   />
-
-                   {configError && (
-                       <div className="flex items-center gap-2 mb-4 text-red-400">
-                           <AlertCircle className="w-4 h-4" />
-                           <p className="text-xs font-bold">{configError}</p>
-                       </div>
-                   )}
-
-                   <div className="flex flex-col gap-2">
-                       <div className="flex gap-2">
-                           <button onClick={() => setShowDbConfig(false)} className="flex-1 py-3 bg-white/5 rounded hover:bg-white/10 text-white/60 text-xs font-bold uppercase">Annuler</button>
-                           <button onClick={handleSaveDbUrl} className="flex-1 py-3 bg-white text-black rounded hover:bg-gray-200 text-xs font-bold uppercase">Connecter</button>
-                       </div>
-                       
-                       <div className="w-full h-[1px] bg-white/5 my-2"></div>
-                       
-                       <button 
-                           onClick={handleResetDbConfig} 
-                           className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded text-red-400 text-[10px] font-bold uppercase tracking-wider"
-                       >
-                           Réinitialiser la configuration (Défaut)
-                       </button>
-                   </div>
-             </div>
-          ) : (
-            <>
-                <div className={`flex gap-6 mb-12 ${isShaking ? 'animate-[drift-fast_0.2s_ease-in-out]' : ''}`}>
-                    {[0, 1, 2, 3].map((i) => (
-                    <div 
-                        key={i}
-                        className={`w-4 h-4 rounded-full transition-all duration-300 ${
-                        i < pin.length ? 'bg-white scale-110 shadow-[0_0_10px_white]' : 'bg-white/10'
-                        }`}
-                    />
-                    ))}
-                </div>
-
-                <div className="grid grid-cols-3 gap-6 w-full px-4">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 0].map((num) => (
-                    <button
-                        key={num}
-                        onClick={() => handleKeypad(num.toString())}
-                        className={`aspect-square flex items-center justify-center rounded-full text-2xl font-space font-bold text-white hover:bg-white/10 active:bg-white/20 transition-colors active:scale-95 ${num === 0 ? 'col-start-2' : ''}`}
-                    >
-                        {num}
-                    </button>
-                    ))}
-                    <div className="col-start-3 row-start-4 flex items-center justify-center">
-                    <button
-                        onClick={() => setPin(prev => prev.slice(0, -1))}
-                        className="w-full aspect-square flex items-center justify-center rounded-full text-white/50 hover:text-white transition-colors active:scale-95"
-                    >
-                        <X className="w-6 h-6" />
-                    </button>
-                    </div>
-                </div>
-            </>
-          )}
-        </div>
+          <label className="block text-xs text-white/50">Email
+            <input type="email" required autoComplete="username" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} className="mt-2 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
+          </label>
+          <label className="block text-xs text-white/50">Mot de passe
+            <input type="password" required minLength={8} autoComplete="current-password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} className="mt-2 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
+          </label>
+          {loginError && <p role="alert" className="text-sm text-red-400">{loginError}</p>}
+          <button type="submit" disabled={isLoginSubmitting} className="w-full rounded bg-white py-3 text-sm font-bold uppercase text-black disabled:opacity-50">
+            {isLoginSubmitting ? 'Connexion…' : 'Se connecter'}
+          </button>
+        </form>
       </div>
     );
   }
 
-  // -- DASHBOARD --
-  // Stats
-  const totalBookings = bookings.filter(b => b.status === 'confirmed' || b.status === 'walk-in').length;
-  const pendingBookings = bookings.filter(b => b.status === 'pending').length;
-
   return (
-    <div className="fixed inset-0 z-[100] bg-[#0a0a0a] flex flex-col animate-slide-up">
-      {/* Top Bar */}
-      <header className="flex justify-between items-center p-4 sm:p-6 border-b border-white/5 bg-[#0a0a0a]">
+    <div className="fixed inset-0 z-[100] flex flex-col bg-[#090909] text-white">
+      <header className="flex items-center justify-between border-b border-white/10 px-4 py-3 sm:px-6">
         <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-apple-blue rounded-lg flex items-center justify-center">
-                <Settings className="w-4 h-4 text-white" />
-            </div>
-            <div>
-                <h1 className="font-space font-bold text-white text-lg leading-tight">Admin</h1>
-                <div className="flex items-center gap-2 mt-1">
-                    {isDbConnected ? (
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
-                            <Wifi className="w-3 h-3 text-green-500" />
-                            <span className="text-[9px] text-green-500 font-bold tracking-wider">SYNC LIVE</span>
-                        </div>
-                    ) : (
-                        <button onClick={() => setShowDbConfig(true)} className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors">
-                            <WifiOff className="w-3 h-3 text-red-500" />
-                            <span className="text-[9px] text-red-500 font-bold tracking-wider">OFFLINE - CONFIG</span>
-                        </button>
-                    )}
-                    
-                    {/* Manual Refresh Button */}
-                    {isDbConnected && (
-                         <button 
-                             onClick={handleRefresh} 
-                             className={`p-1.5 rounded-full hover:bg-white/10 transition-colors ${isRefreshing ? 'animate-spin' : ''}`}
-                             title="Forcer la synchronisation"
-                        >
-                             <RefreshCw className="w-3 h-3 text-white/60" />
-                         </button>
-                    )}
-                </div>
-            </div>
+          <span className="flex h-9 w-9 items-center justify-center rounded-md bg-apple-blue"><Settings className="h-4 w-4" aria-hidden="true" /></span>
+          <div>
+            <h1 className="font-space text-lg font-bold">Administration</h1>
+            <span className={`text-[10px] font-bold uppercase ${isDbConnected ? 'text-green-400' : 'text-red-400'}`}>{isDbConnected ? 'Synchronisé' : 'Indisponible'}</span>
+          </div>
         </div>
-        <button 
-          onClick={logout}
-          className="w-10 h-10 rounded-full bg-white/5 hover:bg-red-500/20 text-white/60 hover:text-red-500 flex items-center justify-center transition-colors"
-        >
-          <Power className="w-4 h-4" />
-        </button>
+        <div className="flex gap-2">
+          <button type="button" onClick={handleRefresh} disabled={isRefreshing} aria-label="Actualiser" title="Actualiser" className="flex h-10 w-10 items-center justify-center rounded-md bg-white/5 text-white/60 hover:text-white disabled:opacity-50">
+            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} aria-hidden="true" />
+          </button>
+          <button type="button" onClick={logout} aria-label="Se déconnecter" title="Se déconnecter" className="flex h-10 w-10 items-center justify-center rounded-md bg-white/5 text-white/60 hover:bg-red-500/10 hover:text-red-400">
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+          </button>
+        </div>
       </header>
 
-      {/* Warning Banner if Offline */}
-      {!isDbConnected && (
-        <div className="bg-red-500/10 border-b border-red-500/10 px-6 py-2 flex items-center justify-center gap-2 cursor-pointer hover:bg-red-500/20 transition-colors" onClick={() => setShowDbConfig(true)}>
-            <AlertCircle className="w-3 h-3 text-red-500" />
-            <p className="text-[10px] text-red-400 text-center font-mono underline decoration-red-500/30">
-                {dbError ? (dbError.includes('password') ? "Mot de passe incorrect : Cliquez pour corriger" : "Erreur connexion : Cliquez pour configurer") : "⚠️ Mode Hors Ligne - Cliquez pour connecter le projet 'daryl'"}
-            </p>
-        </div>
-      )}
+      <nav className="grid grid-cols-3 gap-1 border-b border-white/10 bg-black p-2" aria-label="Vues administrateur">
+        {([
+          ['schedule', CalendarDays, 'Planning'],
+          ['stats', CircleDollarSign, 'Activité'],
+          ['loyalty', Gift, 'Fidélité'],
+        ] as const).map(([id, Icon, label]) => (
+          <button key={id} type="button" onClick={() => setView(id)} aria-pressed={view === id} className={`flex items-center justify-center gap-2 rounded-md py-2 text-xs font-bold uppercase ${view === id ? 'bg-white text-black' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}>
+            <Icon className="h-4 w-4" aria-hidden="true" />{label}
+          </button>
+        ))}
+      </nav>
 
-      {/* Manual Config Modal Overlay inside Dashboard (if accessed via header button) */}
-      {showDbConfig && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6">
-             <div className="w-full max-w-sm bg-[#111] p-6 rounded-2xl border border-white/10 animate-fade-in shadow-2xl">
-                   <h3 className="text-white font-bold mb-4 flex items-center gap-2">
-                       <Database className="w-4 h-4 text-apple-blue" />
-                       Lier la Base de Données
-                   </h3>
-                   
-                   {/* Affichage de l'erreur REELLE de connexion ici */}
-                   {dbError && (
-                       <div className="bg-red-500/10 border border-red-500/20 p-3 rounded mb-4">
-                           <p className="text-[10px] text-red-400 font-bold uppercase mb-1 flex items-center gap-1">
-                               <AlertCircle className="w-3 h-3" />
-                               Échec de connexion :
-                           </p>
-                           <p className="text-[10px] text-white/70 font-mono break-all">
-                               {dbError}
-                           </p>
-                       </div>
-                   )}
+      {actionError && <p role="alert" className="border-b border-red-500/20 bg-red-500/10 px-4 py-2 text-sm text-red-300">{actionError}</p>}
 
-                   <p className="text-xs text-white/60 mb-4">
-                       Si la connexion automatique échoue, vous pouvez forcer le lien ici.
-                   </p>
+      <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+        {view === 'schedule' && (
+          <div className="mx-auto max-w-3xl">
+            <div className="mb-4 flex gap-2 overflow-x-auto pb-2">
+              {schedules.map((schedule, index) => {
+                const date = getFormattedDate(schedule.date);
+                return (
+                  <button key={schedule.date} type="button" onClick={() => setSelectedDateIndex(index)} className={`h-16 min-w-[64px] rounded-md border text-center ${selectedDateIndex === index ? 'border-apple-blue bg-blue-500/10 text-white' : 'border-white/10 bg-white/[0.03] text-white/40'}`}>
+                    <span className="block text-[9px] uppercase">{date.weekday}</span>
+                    <strong className="text-lg">{date.day}</strong>
+                  </button>
+                );
+              })}
+            </div>
 
-                   <input 
-                        type="text" 
-                        value={dbUrlInput} 
-                        onChange={(e) => {
-                             setDbUrlInput(e.target.value);
-                             setConfigError(null);
-                        }}
-                        placeholder="postgres://..."
-                        className={`w-full bg-black border ${configError ? 'border-red-500' : 'border-white/20'} rounded p-3 text-xs text-white font-mono mb-2 focus:border-apple-blue outline-none placeholder:text-white/20`}
-                   />
-
-                   {configError && (
-                       <div className="flex items-center gap-2 mb-4 text-red-400">
-                           <AlertCircle className="w-4 h-4" />
-                           <p className="text-xs font-bold">{configError}</p>
-                       </div>
-                   )}
-
-                   <div className="flex flex-col gap-2">
-                       <div className="flex gap-2">
-                           <button onClick={() => setShowDbConfig(false)} className="flex-1 py-3 bg-white/5 rounded hover:bg-white/10 text-white/60 text-xs font-bold uppercase">Annuler</button>
-                           <button onClick={handleSaveDbUrl} className="flex-1 py-3 bg-white text-black rounded hover:bg-gray-200 text-xs font-bold uppercase">Connecter</button>
-                       </div>
-                       
-                       <div className="w-full h-[1px] bg-white/5 my-2"></div>
-                       
-                       <button 
-                           onClick={handleResetDbConfig} 
-                           className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded text-red-400 text-[10px] font-bold uppercase tracking-wider"
-                       >
-                           Réinitialiser la configuration (Défaut)
-                       </button>
-                   </div>
-             </div>
-        </div>
-      )}
-
-      {/* View Selector */}
-      <div className="p-4 border-b border-white/5 bg-[#050505]">
-         <div className="flex gap-2 mb-4">
-            <button 
-                onClick={() => setView('schedule')}
-                className={`flex-1 py-2 rounded-md font-mono text-xs uppercase tracking-wider transition-colors ${view === 'schedule' ? 'bg-white text-black' : 'bg-white/5 text-white/40'}`}
-            >
-                Planning
-            </button>
-            <button 
-                onClick={() => setView('stats')}
-                className={`flex-1 py-2 rounded-md font-mono text-xs uppercase tracking-wider transition-colors ${view === 'stats' ? 'bg-white text-black' : 'bg-white/5 text-white/40'}`}
-            >
-                Stats
-            </button>
-            <button 
-                onClick={() => setView('loyalty')}
-                className={`flex-1 py-2 rounded-md font-mono text-xs uppercase tracking-wider transition-colors ${view === 'loyalty' ? 'bg-white text-black' : 'bg-white/5 text-white/40'}`}
-            >
-                Fidélité
-            </button>
-         </div>
-
-         {view === 'schedule' && (
-             <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4 snap-x">
-                {schedules.map((schedule, index) => {
-                    const d = getFormattedDate(schedule.date);
-                    const isActive = index === selectedDateIndex;
-                    return (
-                        <button
-                            key={schedule.date}
-                            onClick={() => setSelectedDateIndex(index)}
-                            className={`
-                                flex flex-col items-center justify-center min-w-[4.5rem] h-16 rounded-lg border transition-all snap-center
-                                ${isActive 
-                                    ? 'bg-white/10 border-apple-blue text-white shadow-[0_0_15px_rgba(0,113,227,0.3)]' 
-                                    : 'bg-[#111] border-white/5 text-gray-500'}
-                            `}
-                        >
-                            <span className="text-[9px] font-mono uppercase">{d.weekday}</span>
-                            <span className="text-lg font-bold font-space">{d.day}</span>
-                        </button>
-                    )
-                })}
-             </div>
-         )}
-      </div>
-
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-4 pb-24">
-        {/* ... (Contenu identique) ... */}
-        {view === 'loyalty' && (
-            <div className="flex flex-col items-center justify-start h-full max-w-sm mx-auto space-y-4">
-                
-                {/* Search Bar */}
-                <div className="bg-[#111] p-6 rounded-3xl border border-white/10 w-full text-center">
-                    <h3 className="text-white font-space font-bold text-xl mb-4 flex items-center justify-center gap-2">
-                        <Gift className="w-5 h-5 text-apple-blue" />
-                        Espace Fidélité
-                    </h3>
-                    <div className="relative mb-4">
-                        <input 
-                            type="tel" 
-                            placeholder="N° Téléphone Client"
-                            value={scanPhone}
-                            onChange={(e) => {
-                                setScanPhone(e.target.value);
-                                setScanReferral(null);
-                                setScanVisits(0);
-                                setClientBookings([]);
-                            }}
-                            className="w-full bg-black border border-white/20 rounded-xl p-4 text-center text-white font-mono text-lg focus:border-apple-blue outline-none pl-10"
-                        />
-                        <Search className="w-4 h-4 text-white/40 absolute left-4 top-1/2 -translate-y-1/2" />
-                    </div>
-                    {!scanReferral && (
-                        <button 
-                            onClick={checkLoyalty}
-                            className="w-full py-3 bg-white/10 text-white font-bold uppercase tracking-widest text-xs rounded-xl hover:bg-white/20"
-                        >
-                            Rechercher
-                        </button>
+            <div className="space-y-2">
+              {currentSchedule.slots.map((slot) => {
+                const startingBooking = dayBookings.find((booking) => booking.time === slot.time);
+                const slotStart = Date.parse(slot.startAt || '');
+                const coveringBooking = dayBookings.find((booking) => ACTIVE_STATUSES.includes(booking.status)
+                  && Date.parse(booking.startAt || '') < slotStart + 15 * 60_000
+                  && Date.parse(booking.endAt || booking.startAt || '') > slotStart);
+                const canBlock = Boolean(slot.startAt && !coveringBooking && (slot.isAvailable || slot.isAdminBlocked));
+                const canBook = Boolean(slot.startAt && slot.isAvailable && slot.availableServiceIds?.length !== 0);
+                return (
+                  <div key={slot.id} className={`grid min-h-[64px] grid-cols-[52px_1fr_auto] items-center gap-3 rounded-md border px-3 py-2 ${coveringBooking ? 'border-blue-500/20 bg-blue-500/5' : slot.isAdminBlocked ? 'border-red-500/20 bg-red-500/5' : 'border-white/5 bg-black'}`}>
+                    <span className="font-mono text-xs text-white/50">{slot.time}</span>
+                    {startingBooking ? (
+                      <button type="button" onClick={() => setSelectedBooking(startingBooking)} className="min-w-0 text-left focus-visible:ring-2 focus-visible:ring-apple-blue">
+                        <span className="block truncate text-sm font-bold">{startingBooking.client.firstName} {startingBooking.client.lastName}</span>
+                        <span className="block truncate text-[10px] text-white/40">{startingBooking.service.name} · {STATUS_LABEL[startingBooking.status]}</span>
+                      </button>
+                    ) : (
+                      <span className="text-[10px] uppercase text-white/30">{coveringBooking ? 'Occupé' : slot.isAdminBlocked ? 'Bloqué' : slot.unavailableReason === 'past' ? 'Passé' : slot.isAvailable ? 'Libre' : 'Fermé'}</span>
                     )}
+                    <div className="flex gap-1">
+                      {canBlock && (
+                        <button type="button" onClick={() => runAction(`block-${slot.id}`, () => toggleSlotAvailability(currentSchedule.date, slot.id)).catch(() => undefined)} disabled={Boolean(pendingAction)} aria-label={slot.isAdminBlocked ? `Débloquer ${slot.time}` : `Bloquer ${slot.time}`} title={slot.isAdminBlocked ? 'Débloquer' : 'Bloquer'} className={`flex h-9 w-9 items-center justify-center rounded-md ${slot.isAdminBlocked ? 'bg-red-500 text-white' : 'bg-white/5 text-white/40 hover:text-white'}`}>
+                          <Ban className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                      {canBook && !coveringBooking && (
+                        <button type="button" onClick={() => openManualBooking(slot.id, slot.availableServiceIds)} aria-label={`Ajouter un rendez-vous à ${slot.time}`} title="Ajouter un rendez-vous" className="flex h-9 w-9 items-center justify-center rounded-md bg-white/5 text-white/40 hover:bg-white hover:text-black">
+                          <UserPlus className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {view === 'stats' && (
+          <div className="mx-auto grid max-w-3xl grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              [Users, 'À venir', stats.upcoming.toString()],
+              [CalendarDays, 'En attente', stats.pending.toString()],
+              [CheckCircle, 'Terminés', stats.completed.toString()],
+              [CircleDollarSign, 'CA du mois', money(stats.revenue)],
+            ].map(([Icon, label, value]) => {
+              const StatIcon = Icon as typeof Users;
+              return (
+                <div key={label as string} className="rounded-md border border-white/10 bg-[#111] p-4">
+                  <StatIcon className="mb-5 h-5 w-5 text-white/40" aria-hidden="true" />
+                  <strong className="block font-space text-2xl">{value as string}</strong>
+                  <span className="text-[10px] uppercase text-white/40">{label as string}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {view === 'loyalty' && (
+          <div className="mx-auto max-w-xl space-y-4">
+            <form onSubmit={(event) => { event.preventDefault(); refreshRewards(); }} className="flex gap-2 rounded-md border border-white/10 bg-[#111] p-3">
+              <label className="sr-only" htmlFor="reward-phone">Téléphone du client</label>
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" aria-hidden="true" />
+                <input id="reward-phone" type="tel" required autoComplete="tel" inputMode="tel" value={scanPhone} onChange={(event) => { setScanPhone(event.target.value); setRewardSummary(null); setRewardError(''); }} placeholder="Téléphone du client" className="w-full rounded border border-white/10 bg-black py-3 pl-10 pr-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
+              </div>
+              <button type="submit" disabled={isRewardLoading} className="rounded bg-white px-4 text-xs font-bold uppercase text-black disabled:opacity-50">{isRewardLoading ? '…' : 'Chercher'}</button>
+            </form>
+            {rewardError && <p role="alert" className="rounded-md border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{rewardError}</p>}
+
+            {rewardSummary && (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-md border border-white/10 bg-[#111] p-4">
+                    <Star className={`mb-4 h-5 w-5 ${rewardSummary.loyaltyEligible ? 'fill-yellow-400 text-yellow-400' : 'text-white/30'}`} aria-hidden="true" />
+                    <strong className="block text-2xl">{rewardSummary.completedVisits % 8} / 8</strong>
+                    <span className="text-[10px] uppercase text-white/40">Prochaine coupe n° {rewardSummary.nextLoyaltyVisit}</span>
+                  </div>
+                  <div className="rounded-md border border-white/10 bg-[#111] p-4">
+                    <Gift className="mb-4 h-5 w-5 text-apple-blue" aria-hidden="true" />
+                    <strong className="block text-2xl text-apple-blue">{money(rewardSummary.referralBalanceCents)}</strong>
+                    <span className="text-[10px] uppercase text-white/40">Crédit parrainage</span>
+                  </div>
                 </div>
 
-                {/* Results Dashboard */}
-                {scanReferral && (
-                    <div className="w-full space-y-4 animate-fade-in">
-                        
-                        {/* 1. Loyalty Card (8th Cut) */}
-                        <div className="bg-[#111] p-5 rounded-2xl border border-white/10 flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] text-white/40 uppercase tracking-widest font-mono mb-1">Fidélité Classique</p>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-3xl font-bold text-white font-space">{scanVisits % 8 === 0 && scanVisits > 0 ? 8 : scanVisits % 8}</span>
-                                    <span className="text-sm text-white/40 font-space">/ 8</span>
-                                </div>
-                            </div>
-                            <div className="h-12 w-12 rounded-full border-4 border-white/10 flex items-center justify-center relative">
-                                <Star className={`w-5 h-5 ${scanVisits > 0 && scanVisits % 8 === 0 ? 'text-yellow-500 fill-yellow-500 animate-pulse' : 'text-white/20'}`} />
-                            </div>
-                        </div>
-
-                         {/* 2. Referral Card */}
-                         <div className="bg-[#111] p-5 rounded-2xl border border-white/10 flex items-center justify-between">
-                            <div>
-                                <p className="text-[10px] text-white/40 uppercase tracking-widest font-mono mb-1">Solde Parrainage</p>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-3xl font-bold text-apple-blue font-space">{scanReferral.creditAmount} €</span>
-                                    <span className="text-[10px] text-white/40 font-mono ml-2">DISPONIBLE</span>
-                                </div>
-                            </div>
-                            <div className="h-12 w-12 rounded-full bg-apple-blue/10 flex items-center justify-center">
-                                <Zap className="w-5 h-5 text-apple-blue" />
-                            </div>
-                        </div>
-
-                        {/* 3. Actions on Bookings */}
-                        {clientBookings.length > 0 && (
-                             <div className="text-left bg-[#111] p-4 rounded-2xl border border-white/10">
-                                <p className="text-[10px] uppercase text-white/40 mb-3 font-mono tracking-widest">Créneaux éligibles :</p>
-                                <div className="space-y-3">
-                                    {clientBookings.map(booking => {
-                                        const d = getFormattedDate(booking.date);
-                                        const isFree = booking.service.price === '0 €';
-                                        
-                                        return (
-                                            <div key={booking.id} className="p-3 bg-white/5 border border-white/5 rounded-xl">
-                                                <div className="flex justify-between items-start mb-3">
-                                                    <div>
-                                                        <p className="text-xs text-white font-bold">{d.weekday} {d.day} {d.month} <span className="opacity-50">@ {booking.time}</span></p>
-                                                        <p className="text-[10px] text-white/50 font-mono">{booking.service.name}</p>
-                                                    </div>
-                                                    <span className={`text-xs font-bold ${isFree ? 'text-green-500' : 'text-white'}`}>
-                                                        {booking.service.price}
-                                                    </span>
-                                                </div>
-
-                                                {!isFree && (
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <button
-                                                            disabled={scanReferral.creditAmount === 0}
-                                                            onClick={() => handleRedeemReferral(booking.id)}
-                                                            className="py-2 px-2 bg-apple-blue/10 hover:bg-apple-blue/20 text-apple-blue border border-apple-blue/30 rounded-lg text-[9px] font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed"
-                                                        >
-                                                            Utiliser Solde
-                                                        </button>
-                                                        <button
-                                                            disabled={!(scanVisits > 0 && scanVisits % 8 === 0)}
-                                                            onClick={() => handleApplyLoyaltyCut(booking.id)}
-                                                            className="py-2 px-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/30 rounded-lg text-[9px] font-bold uppercase disabled:opacity-30 disabled:cursor-not-allowed"
-                                                        >
-                                                            Offrir 8ème Coupe
-                                                        </button>
-                                                    </div>
-                                                )}
-                                                {isFree && (
-                                                    <div className="bg-green-500/10 py-1 px-2 rounded flex items-center justify-center gap-1">
-                                                        <CheckCircle className="w-3 h-3 text-green-500" />
-                                                        <span className="text-[9px] text-green-500 font-bold uppercase">Récompense Appliquée</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                        
-                        {clientBookings.length === 0 && (
-                             <div className="bg-red-500/10 p-3 rounded-lg border border-red-500/20">
-                                 <p className="text-xs text-red-400 text-center">Aucun rendez-vous trouvé.</p>
-                             </div>
-                        )}
+                <div className="rounded-md border border-white/10 bg-[#111] p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold">{rewardSummary.firstName} {rewardSummary.lastName}</p>
+                      <p className="text-xs text-white/40">Code ambassadeur : {rewardSummary.referralCode || 'non créé'}</p>
                     </div>
-                )}
-            </div>
-        )}
-
-        {/* ... (Reste du code Schedule et Modal de détail identique) ... */}
-        {view === 'schedule' && (
-            <div className="space-y-2">
-                {currentDateSchedule.slots.map((slot) => {
-                    const bookingForThisSlot = dayBookings.find(b => b.time === slot.time);
-                    
-                    return (
-                        <div key={slot.id} className="relative">
-                            <div className={`
-                                flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl border transition-colors relative overflow-hidden
-                                ${bookingForThisSlot
-                                    ? 'bg-[#151515] border-white/10' 
-                                    : !slot.isAvailable 
-                                        ? 'bg-red-900/10 border-red-500/20'
-                                        : 'bg-black border-white/5'}
-                            `}>
-                                {!slot.isAvailable && (
-                                    <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEgMWwyMCAyMCIgc3Ryb2tlPSJyZ2JhKDI1NSwgMCwgMCwgMC4xKSIgc3Ryb2tlLXdpZHRoPSIxIi8+PC9zdmc+')] opacity-50 pointer-events-none" />
-                                )}
-
-                                <span className={`font-mono text-xs sm:text-sm w-10 sm:w-12 z-10 ${!slot.isAvailable ? 'text-red-500/50' : 'text-white/60'}`}>{slot.time}</span>
-                                
-                                <div className="flex-1 min-h-[2.5rem] flex flex-col justify-center z-10">
-                                    {bookingForThisSlot ? (
-                                        <button 
-                                            onClick={() => setSelectedBooking(bookingForThisSlot)}
-                                            className={`
-                                                flex items-center justify-between p-2 sm:p-3 rounded-lg w-full text-left
-                                                ${bookingForThisSlot.status === 'confirmed' ? 'bg-apple-blue/20 border border-apple-blue/30' : 
-                                                  bookingForThisSlot.status === 'pending' ? 'bg-orange-500/10 border border-orange-500/30' : 
-                                                  bookingForThisSlot.status === 'walk-in' ? 'bg-purple-500/10 border border-purple-500/30' : 'bg-white/5'}
-                                            `}
-                                        >
-                                            <div className="flex flex-col overflow-hidden">
-                                                <span className="font-bold text-sm text-white truncate">{bookingForThisSlot.client.firstName} {bookingForThisSlot.client.lastName}</span>
-                                                <span className="text-[10px] text-white/50 font-mono truncate">
-                                                    {bookingForThisSlot.status === 'walk-in' ? 'Réservation Manuelle' : bookingForThisSlot.service.name}
-                                                </span>
-                                            </div>
-                                            <div className={`w-2 h-2 rounded-full shrink-0 ml-2 ${
-                                                bookingForThisSlot.status === 'confirmed' ? 'bg-apple-blue' : 
-                                                bookingForThisSlot.status === 'pending' ? 'bg-orange-500' : 
-                                                bookingForThisSlot.status === 'walk-in' ? 'bg-purple-500' : 'bg-red-500'
-                                            }`} />
-                                        </button>
-                                    ) : (
-                                        <div className="flex items-center justify-between h-full">
-                                            <span className={`text-[10px] sm:text-xs uppercase tracking-widest ${!slot.isAvailable ? 'text-red-500' : 'text-white/20'}`}>
-                                                {slot.isAvailable ? 'Libre' : 'Bloqué'}
-                                            </span>
-                                            
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => toggleSlotAvailability(currentDateSchedule.date, slot.id)}
-                                                    className={`p-2 rounded-md transition-colors ${!slot.isAvailable ? 'bg-red-500 text-white' : 'bg-white/5 text-white/40 hover:bg-white/10'}`}
-                                                >
-                                                    <Ban className="w-4 h-4" />
-                                                </button>
-                                                {slot.isAvailable && (
-                                                    <button
-                                                        onClick={() => {
-                                                            setManualSlotId(slot.id);
-                                                            setIsManualBookingOpen(true);
-                                                        }}
-                                                        className="p-2 rounded-md bg-white/5 text-white/40 hover:bg-white text-black transition-colors"
-                                                    >
-                                                        <UserPlus className="w-4 h-4" />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        )}
-
-      </div>
-      
-      {/* ... (Modals manuelle et détail identiques) ... */}
-      {isManualBookingOpen && (
-          <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-              <div className="bg-[#111] w-full max-w-sm rounded-xl border border-white/10 p-6 animate-fade-in">
-                  <h3 className="text-white font-bold font-space text-lg mb-4">Ajout Rendez-vous Manuel</h3>
-                  <form onSubmit={handleCreateWalkIn} className="space-y-4">
-                      <div>
-                          <label className="text-[10px] text-white/40 uppercase font-mono block mb-2">Nom Client / Description</label>
-                          <input 
-                              autoFocus
-                              type="text" 
-                              value={manualName}
-                              onChange={(e) => setManualName(e.target.value)}
-                              className="w-full bg-black border border-white/20 rounded p-3 text-white focus:border-apple-blue outline-none"
-                              placeholder="ex: Client de passage"
-                          />
+                    {!rewardSummary.referralCode && (
+                      <div className="flex gap-1">
+                        <input aria-label="Nouveau code ambassadeur" maxLength={4} value={newReferralCode} onChange={(event) => setNewReferralCode(event.target.value.replace(/[^a-z0-9]/gi, '').toUpperCase())} className="w-20 rounded border border-white/10 bg-black p-2 text-center font-mono uppercase outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
+                        <button type="button" onClick={createReferralCode} disabled={!/^[A-Z0-9]{4}$/.test(newReferralCode)} aria-label="Créer le code" title="Créer le code" className="flex h-10 w-10 items-center justify-center rounded bg-white text-black disabled:opacity-30"><Plus className="h-4 w-4" aria-hidden="true" /></button>
                       </div>
-                      <div className="grid grid-cols-2 gap-3 pt-2">
-                          <button 
-                              type="button" 
-                              onClick={() => setIsManualBookingOpen(false)}
-                              className="py-3 rounded border border-white/10 text-white/60 hover:text-white"
-                          >
-                              Annuler
-                          </button>
-                          <button 
-                              type="submit" 
-                              disabled={!manualName}
-                              className={`py-3 rounded font-bold uppercase tracking-wider text-xs ${manualName ? 'bg-white text-black' : 'bg-white/10 text-white/20'}`}
-                          >
-                              Ajouter
-                          </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <h2 className="text-xs font-bold uppercase text-white/40">Rendez-vous éligibles</h2>
+                  {rewardBookings.length === 0 && <p className="rounded-md border border-white/10 p-4 text-sm text-white/40">Aucun rendez-vous actif.</p>}
+                  {rewardBookings.map((booking) => (
+                    <div key={booking.id} className="rounded-md border border-white/10 bg-[#111] p-4">
+                      <div className="mb-3 flex items-start justify-between gap-3">
+                        <div><p className="text-sm font-bold">{booking.date} à {booking.time}</p><p className="text-xs text-white/40">{booking.service.name}</p></div>
+                        <strong>{money(booking.currentPriceCents || 0)}</strong>
                       </div>
-                  </form>
-              </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => applyReward('referral', booking)} disabled={booking.status === 'pending' || rewardSummary.referralBalanceCents <= 0 || (booking.loyaltyDiscountCents || 0) > 0} className="rounded border border-blue-500/30 bg-blue-500/10 py-2 text-xs font-bold text-blue-400 disabled:opacity-30">Utiliser le crédit</button>
+                        <button type="button" onClick={() => applyReward('loyalty', booking)} disabled={booking.status === 'pending' || !rewardSummary.loyaltyEligible || (booking.referralDiscountCents || 0) > 0} className="rounded border border-yellow-500/30 bg-yellow-500/10 py-2 text-xs font-bold text-yellow-400 disabled:opacity-30">Coupe offerte</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
+        )}
+      </main>
+
+      {manualSlotId && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="manual-title">
+          <form onSubmit={handleManualBooking} className="w-full max-w-sm space-y-4 rounded-lg border border-white/10 bg-[#111] p-5">
+            <div className="flex items-center justify-between"><h2 id="manual-title" className="font-space text-lg font-bold">Rendez-vous manuel</h2><button type="button" onClick={() => setManualSlotId(null)} aria-label="Fermer" className="p-2 text-white/40 hover:text-white"><X className="h-5 w-5" aria-hidden="true" /></button></div>
+            {actionError && <p role="alert" className="text-sm text-red-400">{actionError}</p>}
+            <label className="block text-xs text-white/50">Prénom<input autoFocus required autoComplete="given-name" value={manualFirstName} onChange={(event) => setManualFirstName(event.target.value)} className="mt-1 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" /></label>
+            <label className="block text-xs text-white/50">Nom<input required autoComplete="family-name" value={manualLastName} onChange={(event) => setManualLastName(event.target.value)} className="mt-1 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" /></label>
+            <label className="block text-xs text-white/50">Téléphone<input required type="tel" autoComplete="tel" inputMode="tel" value={manualPhone} onChange={(event) => setManualPhone(event.target.value)} className="mt-1 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" /></label>
+            <label className="block text-xs text-white/50">Service<select required value={manualServiceId} onChange={(event) => setManualServiceId(event.target.value)} className="mt-1 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue">{services.filter((service) => currentSchedule.slots.find((slot) => slot.id === manualSlotId)?.availableServiceIds?.includes(service.id) !== false).map((service) => <option key={service.id} value={service.id}>{service.name} · {service.price}</option>)}</select></label>
+            <button type="submit" disabled={pendingAction === 'manual-booking'} className="w-full rounded bg-white py-3 text-sm font-bold uppercase text-black disabled:opacity-50">{pendingAction === 'manual-booking' ? 'Enregistrement…' : 'Ajouter'}</button>
+          </form>
+        </div>
       )}
 
       {selectedBooking && (
-        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4">
-            <div className="bg-[#111] w-full max-w-md rounded-2xl border border-white/10 shadow-2xl animate-slab-entry overflow-hidden flex flex-col max-h-[90vh]">
-                
-                <div className="p-4 sm:p-6 border-b border-white/10 flex justify-between items-start bg-[#111]">
-                    <div>
-                        <span className="text-[10px] text-white/40 font-mono uppercase tracking-widest block mb-1">
-                            {getFormattedDate(selectedBooking.date).weekday} {getFormattedDate(selectedBooking.date).day} @ {selectedBooking.time}
-                        </span>
-                        <h2 className="text-xl sm:text-2xl font-space font-bold text-white">
-                            {selectedBooking.client.firstName} {selectedBooking.client.lastName}
-                        </h2>
-                    </div>
-                    <button 
-                        onClick={() => setSelectedBooking(null)}
-                        className="p-2 rounded-full hover:bg-white/10 text-white/60 hover:text-white"
-                    >
-                        <X className="w-5 h-5" />
-                    </button>
-                </div>
-
-                <div className="p-4 sm:p-6 space-y-6 overflow-y-auto">
-                    <div className="flex items-center justify-between">
-                         <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border ${
-                             selectedBooking.status === 'confirmed' ? 'bg-green-500/10 border-green-500/30 text-green-500' : 
-                             selectedBooking.status === 'pending' ? 'bg-orange-500/10 border-orange-500/30 text-orange-500' : 
-                             selectedBooking.status === 'walk-in' ? 'bg-purple-500/10 border-purple-500/30 text-purple-500' : 'bg-red-500/10 border-red-500/30 text-red-500'
-                        }`}>
-                            {selectedBooking.status === 'confirmed' ? 'Confirmé' : 
-                             selectedBooking.status === 'pending' ? 'En Attente' : 
-                             selectedBooking.status === 'walk-in' ? 'Passage' : 'Rejeté'}
-                        </span>
-                        
-                        <button 
-                            onClick={handleDelete}
-                            className={`p-2 flex items-center gap-2 text-xs uppercase tracking-wider transition-colors rounded ${
-                                deleteConfirm 
-                                ? 'bg-red-500 text-white hover:bg-red-600 animate-pulse' 
-                                : 'text-red-500 hover:text-red-400'
-                            }`}
-                        >
-                            {deleteConfirm ? (
-                                <>
-                                    <Trash2 className="w-4 h-4 fill-current" />
-                                    Confirmer ?
-                                </>
-                            ) : (
-                                <>
-                                    <Trash2 className="w-4 h-4" />
-                                    Supprimer
-                                </>
-                            )}
-                        </button>
-                    </div>
-
-                    <div className="space-y-4">
-                        {selectedBooking.client.phone && (
-                            <div className="flex gap-3 items-start">
-                                <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center shrink-0">
-                                    <Phone className="w-3 h-3 text-white/60" />
-                                </div>
-                                <div>
-                                    <p className="text-xs text-white/40 uppercase tracking-wider font-mono">Contact</p>
-                                    <a href={`tel:${selectedBooking.client.phone}`} className="text-white hover:text-apple-blue transition-colors">
-                                        {selectedBooking.client.phone}
-                                    </a>
-                                </div>
-                            </div>
-                        )}
-                        {/* Status Referral */}
-                        {selectedBooking.referrerPhone && (
-                            <div className="flex gap-3 items-start">
-                                <div className="w-8 h-8 rounded-full bg-apple-blue/10 flex items-center justify-center shrink-0">
-                                    <Zap className="w-3 h-3 text-apple-blue" />
-                                </div>
-                                <div>
-                                    <p className="text-xs text-white/40 uppercase tracking-wider font-mono">Parrainage</p>
-                                    <p className="text-white text-sm">
-                                        Invité par {selectedBooking.referrerPhone}
-                                    </p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                <div className="p-4 bg-[#151515] border-t border-white/5 grid grid-cols-2 gap-3 mt-auto">
-                    <button 
-                        onClick={() => handleStatusUpdate('rejected')}
-                        className="flex items-center justify-center gap-2 py-3 rounded-lg border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors font-bold text-sm uppercase tracking-wider active:scale-95"
-                    >
-                        <XCircle className="w-4 h-4" /> Refuser
-                    </button>
-                    <button 
-                        onClick={() => handleStatusUpdate('confirmed')}
-                        className="flex items-center justify-center gap-2 py-3 rounded-lg bg-white text-black hover:bg-gray-200 transition-colors font-bold text-sm uppercase tracking-wider active:scale-95 shadow-lg"
-                    >
-                        <CheckCircle className="w-4 h-4" /> Confirmer
-                    </button>
-                </div>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/80 p-4" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title">
+          <div className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-lg border border-white/10 bg-[#111]">
+            <header className="flex items-start justify-between border-b border-white/10 p-5">
+              <div><p className="mb-1 text-[10px] uppercase text-white/40">{selectedBooking.date} · {selectedBooking.time}</p><h2 id="booking-detail-title" className="font-space text-xl font-bold">{selectedBooking.client.firstName} {selectedBooking.client.lastName}</h2></div>
+              <button type="button" onClick={() => setSelectedBooking(null)} aria-label="Fermer" className="p-2 text-white/40 hover:text-white"><X className="h-5 w-5" aria-hidden="true" /></button>
+            </header>
+            <div className="space-y-4 overflow-y-auto p-5">
+              {actionError && <p role="alert" className="rounded border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300">{actionError}</p>}
+              <span className={`inline-flex rounded border px-2 py-1 text-[10px] font-bold uppercase ${STATUS_STYLE[selectedBooking.status]}`}>{STATUS_LABEL[selectedBooking.status]}</span>
+              <div className="rounded-md border border-white/10 bg-black p-4"><p className="text-xs text-white/40">Service</p><p className="font-bold">{selectedBooking.service.name} · {selectedBooking.service.price}</p></div>
+              <a href={`tel:${selectedBooking.client.phone}`} className="flex items-center gap-3 rounded-md border border-white/10 bg-black p-4 hover:border-white/20"><Phone className="h-4 w-4 text-white/40" aria-hidden="true" /><span>{selectedBooking.client.phone}</span></a>
+              {selectedBooking.status === 'confirmed' && (
+                <a
+                  href={confirmationSmsUrl(selectedBooking)}
+                  onClick={() => { recordAdminSmsDraftOpened(selectedBooking.id).catch(() => undefined); }}
+                  className="flex items-center justify-center gap-2 rounded bg-white p-3 text-sm font-bold text-black"
+                >
+                  <Phone className="h-4 w-4" aria-hidden="true" />
+                  Ouvrir le SMS de confirmation
+                </a>
+              )}
             </div>
+            {ACTIVE_STATUSES.includes(selectedBooking.status) && (
+              <footer className="grid grid-cols-2 gap-2 border-t border-white/10 bg-black p-4">
+                {selectedBooking.status === 'pending' && <><button type="button" onClick={() => handleStatus('rejected')} disabled={Boolean(pendingAction)} className="rounded border border-red-500/30 py-3 text-xs font-bold text-red-400 disabled:opacity-50"><XCircle className="mr-1 inline h-4 w-4" aria-hidden="true" />Refuser</button><button type="button" onClick={() => handleStatus('confirmed')} disabled={Boolean(pendingAction)} className="rounded bg-white py-3 text-xs font-bold text-black disabled:opacity-50"><CheckCircle className="mr-1 inline h-4 w-4" aria-hidden="true" />Confirmer</button></>}
+                {(selectedBooking.status === 'confirmed' || selectedBooking.status === 'walk-in') && <><button type="button" onClick={() => handleStatus('no_show')} disabled={Boolean(pendingAction)} className="rounded border border-yellow-500/30 py-3 text-xs font-bold text-yellow-400 disabled:opacity-50">Absent</button><button type="button" onClick={() => handleStatus('completed')} disabled={Boolean(pendingAction)} className="rounded bg-green-500 py-3 text-xs font-bold text-black disabled:opacity-50"><CheckCircle className="mr-1 inline h-4 w-4" aria-hidden="true" />Terminé</button></>}
+                <button type="button" onClick={handleCancel} disabled={Boolean(pendingAction)} className="col-span-2 rounded border border-white/10 py-3 text-xs font-bold text-white/50 hover:text-red-400 disabled:opacity-50">Annuler le rendez-vous</button>
+              </footer>
+            )}
+          </div>
         </div>
       )}
     </div>

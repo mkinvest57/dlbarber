@@ -6,26 +6,26 @@ const TRANSFORMATIONS = [
   {
     id: '045',
     label: 'Naturel',
-    before: 'https://i.postimg.cc/zf38xXzW/Capture-d-e-cran-2026-01-24-a-13-14-39.png',
-    after: 'https://i.postimg.cc/XvX4s7jw/Capture-d-e-cran-2026-01-24-a-13-14-58.png'
+    before: '/images/before-045.png',
+    after: '/images/after-045.png'
   },
   {
     id: '044',
     label: 'Texture',
-    before: 'https://i.postimg.cc/jScS8Fzb/Capture-d-e-cran-2026-01-24-a-13-13-46.png',
-    after: 'https://i.postimg.cc/Gpph6xjV/Capture-d-e-cran-2026-01-24-a-13-14-03.png'
+    before: '/images/before-044.png',
+    after: '/images/after-044.png'
   },
   {
     id: '042',
     label: 'Restyle',
-    before: 'https://i.postimg.cc/W3DCkd2f/Capture-d-e-cran-2026-01-24-a-13-05-30.png',
-    after: 'https://i.postimg.cc/NjfNXKD2/Capture-d-e-cran-2026-01-24-a-13-08-46.png'
+    before: '/images/before-042.png',
+    after: '/images/after-042.png'
   },
   {
     id: '043',
     label: 'Précision',
-    before: 'https://i.postimg.cc/jqDnDtP9/Capture-d-e-cran-2026-01-24-a-13-12-17.png',
-    after: 'https://i.postimg.cc/fWVSVDm1/Capture-d-e-cran-2026-01-24-a-13-12-48.png'
+    before: '/images/before-043.png',
+    after: '/images/after-043.png'
   }
 ];
 
@@ -182,16 +182,22 @@ export const BeforeAfter = () => {
           
           <div className="flex gap-2 pointer-events-auto mt-2">
             <button 
+              type="button"
               onClick={prevClient}
+              aria-label="Transformation précédente"
+              title="Transformation précédente"
               className="w-10 h-10 flex items-center justify-center border border-white/10 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-black transition-colors"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" aria-hidden="true" />
             </button>
             <button 
+              type="button"
               onClick={nextClient}
+              aria-label="Transformation suivante"
+              title="Transformation suivante"
               className="w-10 h-10 flex items-center justify-center border border-white/10 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white hover:text-black transition-colors"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
         </header>

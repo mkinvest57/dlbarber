@@ -42,12 +42,15 @@ export const Navbar = () => {
             <div className="flex items-center gap-3">
                 {/* Affiliate Button */}
                 <button
+                    type="button"
                     onClick={() => setIsAffiliateOpen(true)}
+                    aria-label="Programme ambassadeur"
+                    title="Programme ambassadeur"
                     className={`p-2 rounded-full transition-all duration-300 ${
                          isScrolled ? 'text-black hover:bg-black/5' : 'text-white hover:bg-white/10'
                     }`}
                 >
-                    <Gift className="w-5 h-5" />
+                    <Gift className="w-5 h-5" aria-hidden="true" />
                 </button>
 
                 {/* Minimal Action */}
