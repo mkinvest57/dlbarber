@@ -6,7 +6,7 @@ import { normalizePhone, optionalReferralCode } from '../_lib/validation.js';
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
   try {
-    const user = await requireAdmin(req, res);
+    const user = requireAdmin(req);
     if (!user) return sendJson(res, 401, { error: 'unauthorized' });
     const body = readBody<{ phone?: unknown; code?: unknown }>(req);
     const phone = normalizePhone(body.phone);

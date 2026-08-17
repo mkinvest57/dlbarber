@@ -96,8 +96,7 @@ export const AdminInterface = () => {
     refreshData,
   } = useBooking();
 
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPassword, setLoginPassword] = useState('');
+  const [loginCode, setLoginCode] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoginSubmitting, setIsLoginSubmitting] = useState(false);
   const [view, setView] = useState<'schedule' | 'stats' | 'loyalty'>('schedule');
@@ -160,8 +159,8 @@ export const AdminInterface = () => {
     event.preventDefault();
     setIsLoginSubmitting(true);
     setLoginError('');
-    const valid = await authenticate(loginEmail, loginPassword);
-    if (!valid) setLoginError('Identifiants invalides ou compte non autorisé.');
+    const valid = await authenticate(loginCode);
+    if (!valid) setLoginError('Code invalide. Réessaie dans quelques minutes.');
     setIsLoginSubmitting(false);
   };
 
@@ -291,13 +290,10 @@ export const AdminInterface = () => {
         <form onSubmit={handleLogin} className="w-full max-w-sm space-y-5 rounded-lg border border-white/10 bg-[#111] p-6">
           <div>
             <h2 id="admin-login-title" className="font-space text-2xl font-bold text-white">Accès administrateur</h2>
-            <p className="mt-2 text-sm text-white/40">Compte professionnel sécurisé</p>
+            <p className="mt-2 text-sm text-white/40">Code d’accès professionnel</p>
           </div>
-          <label className="block text-xs text-white/50">Email
-            <input type="email" required autoComplete="username" value={loginEmail} onChange={(event) => setLoginEmail(event.target.value)} className="mt-2 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
-          </label>
-          <label className="block text-xs text-white/50">Mot de passe
-            <input type="password" required minLength={8} autoComplete="current-password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} className="mt-2 w-full rounded border border-white/20 bg-black p-3 text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
+          <label className="block text-xs text-white/50">Code d’accès
+            <input type="password" inputMode="numeric" pattern="[0-9]{4}" required minLength={4} maxLength={4} autoComplete="one-time-code" value={loginCode} onChange={(event) => setLoginCode(event.target.value.replace(/\D/g, '').slice(0, 4))} className="mt-2 w-full rounded border border-white/20 bg-black p-3 text-center font-mono text-xl tracking-[0.3em] text-white outline-none focus-visible:ring-2 focus-visible:ring-apple-blue" />
           </label>
           {loginError && <p role="alert" className="text-sm text-red-400">{loginError}</p>}
           <button type="submit" disabled={isLoginSubmitting} className="w-full rounded bg-white py-3 text-sm font-bold uppercase text-black disabled:opacity-50">

@@ -6,7 +6,7 @@ Production booking site for Daryl Barber. The browser talks to Vercel API routes
 
 1. Copy `.env.example` to `.env` and fill the server-only Supabase variables.
 2. Apply the migration with `supabase link --project-ref lnldjooudtwtykojcdry` followed by `supabase db push`.
-3. Create and confirm the admin user in Supabase Auth. Set `app_metadata.role` to `admin`, or set the same email in `ADMIN_EMAIL`.
+3. Set `ADMIN_ACCESS_CODE` and a random `ADMIN_SESSION_SECRET` (at least 32 characters).
 4. Run `npx vercel dev` for the full frontend + API flow. `npm run dev` only serves the Vite frontend.
 
 For a local API smoke test, set all values in `.env` and run `npx vercel dev`. The public browser never needs a Supabase key: every data request is handled by a server function.
@@ -21,14 +21,14 @@ npm run build
 
 ## Vercel environment
 
-Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, and `ADMIN_EMAIL` in the Vercel project. The secret key must be configured only for Production/Preview server environments and must never use a `VITE_` prefix.
+Configure `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY`, `ADMIN_ACCESS_CODE`, and `ADMIN_SESSION_SECRET` in the Vercel project. These values are server-only and must never use a `VITE_` prefix.
 
 Use the Supabase project URL `https://lnldjooudtwtykojcdry.supabase.co` and project ref `lnldjooudtwtykojcdry`. Set the variables in each Vercel environment that will serve traffic, then redeploy so the functions receive them.
 
 ## Launch checklist
 
 1. Authenticate the Supabase CLI, link project ref `lnldjooudtwtykojcdry`, run `supabase db push`, and run the Supabase database advisors.
-2. Create and confirm one Supabase Auth email/password user and give it `app_metadata.role = admin`, or set `ADMIN_EMAIL` to that exact address.
+2. Set a four-digit `ADMIN_ACCESS_CODE` and a random `ADMIN_SESSION_SECRET` in Vercel, then verify the admin code login.
 3. Verify public booking, overlap rejection, admin login, manual walk-in, status transitions, referral ledger redemption, loyalty redemption, and customer cancellation with `vercel dev`.
 4. Revoke and rotate the exposed Neon credential before pushing any history or deploying this repository. Old commits still contain that credential even though the current source does not.
 5. Add the final business legal identity, postal address, registration details, and contact email to the legal notice before public launch. The repository cannot infer those facts.

@@ -6,7 +6,7 @@ import { normalizePhone, uuid } from '../_lib/validation.js';
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   if (req.method !== 'GET' && req.method !== 'POST') return methodNotAllowed(res, ['GET', 'POST']);
   try {
-    const user = await requireAdmin(req, res);
+    const user = requireAdmin(req);
     if (!user) return sendJson(res, 401, { error: 'unauthorized' });
     const supabase = getSupabaseAdminClient();
 

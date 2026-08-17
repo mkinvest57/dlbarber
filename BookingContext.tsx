@@ -21,7 +21,7 @@ interface BookingContextType {
   isAdminMode: boolean;
   setAdminMode: (mode: boolean) => void;
   isAuthenticated: boolean;
-  authenticate: (email: string, password: string) => Promise<boolean>;
+  authenticate: (code: string) => Promise<boolean>;
   logout: () => Promise<void>;
   getFormattedDate: (dateStr: string) => { day: string; month: string; weekday: string };
   lookupCustomerRewards: (phone: string) => Promise<CustomerRewardSummary>;
@@ -230,9 +230,9 @@ export const BookingProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  const authenticate = async (email: string, password: string) => {
+  const authenticate = async (code: string) => {
     try {
-      await request('/api/admin/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      await request('/api/admin/login', { method: 'POST', body: JSON.stringify({ code }) });
       setIsAuthenticated(true);
       setAdminMode(true);
       return true;

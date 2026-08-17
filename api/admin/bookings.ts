@@ -16,7 +16,7 @@ type ManualBooking = {
 
 export default async function handler(req: ApiRequest, res: ApiResponse) {
   try {
-    const user = await requireAdmin(req, res);
+    const user = requireAdmin(req);
     if (!user) return sendJson(res, 401, { error: 'unauthorized' });
     const supabase = getSupabaseAdminClient();
 
